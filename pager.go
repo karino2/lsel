@@ -19,7 +19,7 @@ type Pager struct {
 	lines []string
 	File         string   // current file
 	lineSelected string
-	posY int
+	posY, posX int
 	offX, offY int
 }
 
@@ -28,6 +28,7 @@ func (p *Pager) SetContent(s string) {
 	p.lines = regexp.MustCompile("\r\n|\n\r|\n|\r").Split(p.str, -1)
 	p.offX = 0
 	p.offY = 0
+	p.posX = 0
 	p.posY = 0
 	p.linenum = len(p.lines)
 }
@@ -118,7 +119,7 @@ func (p *Pager) DrawInternal(needRefresh bool) {
 	}
 	// p.drawStatusLine( "USAGE [exit: ESC/q] [scroll: j,k/C-n,C-p] "+nextFileUsage+mode+string(empty))
 	p.drawStatusLine( "USAGE [exit: ESC/q] [scroll: j,k/C-n,C-p] "+nextFileUsage+mode)
-	termbox.SetCursor(0, p.posY-p.offY+1)
+	termbox.SetCursor(p.posX-p.offX, p.posY-p.offY+1)
 	termbox.Flush()
 }
 
@@ -257,13 +258,25 @@ func (p *Pager) scrollUp() {
 }
 
 func (p *Pager) scrollRight() {
-	p.offX += 29
-	p.DrawWithRefresh()
+	withRefresh := false
+	p.posX += 1
+	width := termWidth()
+	if p.posX - p.offX >= width {
+		withRefresh = true
+		p.offX += width/2
+	}
+	p.DrawInternal(withRefresh)
 }
 
 func (p *Pager) scrollLeft() {
-	p.offX = max(0, p.offX - 29)
-	p.DrawWithRefresh()
+	withRefresh := false
+	p.posX = max(0, p.posX -1)
+
+	if p.posX < p.offX {
+		withRefresh = true
+		p.offX = max(0, p.offX - termWidth()/2)
+	}
+	p.DrawInternal(withRefresh)
 }
 
 func (p *Pager) Init() {
