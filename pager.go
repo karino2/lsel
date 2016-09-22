@@ -3,6 +3,7 @@ package main
 import (
 	// "fmt"
 	"github.com/gdamore/tcell"
+	// "github.com/zyedidia/tcell"
 	"github.com/mattn/go-runewidth"
 	// "log"
 	"regexp"
@@ -80,13 +81,14 @@ func puts(s tcell.Screen, style tcell.Style, x, y int, str string) {
 
 
 func (p *Pager) drawStatusLine(str string) {
-	putln(p.screen, 1, str, tcell.StyleDefault.Foreground(tcell.ColorBlue).Background(tcell.ColorWhite))
+	putln(p.screen, 0, str, tcell.StyleDefault.Foreground(tcell.ColorBlue).Background(tcell.ColorWhite))
 }
 
 
 func (p *Pager) Size() (int, int) {
 	x, y := p.screen.Size()
-	return x, y-1
+	// return x, y-1
+	return x, y
 }
 
 func (p *Pager) termLineNum() int {
@@ -122,7 +124,7 @@ func (p *Pager) drawOneLine(y int) {
 
 	for i := 0; i < min(p.termWidth(), len(runes)-p.offX); i++ {
 		screenX := i
-		p.screen.SetContent(screenX,  screenY+1, runes[i+p.offX], nil, tcell.StyleDefault)
+		p.screen.SetContent(screenX,  screenY, runes[i+p.offX], nil, tcell.StyleDefault)
 	}
 }
 
@@ -149,7 +151,7 @@ func (p *Pager) DrawInternal(needRefresh bool) {
 	p.screen.Clear()
 	if needRefresh {
 		// termbox.Flush()
-		p.screen.Sync()
+		// p.screen.Sync()
 		// p.screen.Show()
 	}
 
