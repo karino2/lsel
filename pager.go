@@ -242,7 +242,7 @@ func (p *Pager) viewModeKey(ev *tcell.EventKey) int {
 		case 'h':
 			p.scrollLeft()
 		case 'q':
-			p.screen.Sync()
+			// p.screen.Sync()
 			return QUIT
 		case 'b':
 			p.offY = max(0, p.offY - 29)
