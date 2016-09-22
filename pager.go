@@ -217,9 +217,9 @@ func (p *Pager) viewModeKey(ev *tcell.EventKey) int {
 		termbox.Sync()
 		*/
 	case tcell.KeyRight:
-		p.scrollRight()
+		p.moveRight()
 	case tcell.KeyLeft:
-		p.scrollLeft()
+		p.moveLeft()
 	case tcell.KeyCtrlN, tcell.KeyDown:
 		p.scrollDown()
 	case tcell.KeyCtrlP, tcell.KeyUp:
@@ -238,9 +238,9 @@ func (p *Pager) viewModeKey(ev *tcell.EventKey) int {
 		case 'k':
 			p.scrollUp()
 		case 'l':
-			p.scrollRight()
+			p.moveRight()
 		case 'h':
-			p.scrollLeft()
+			p.moveLeft()
 		case 'q':
 			// p.screen.Sync()
 			return QUIT
@@ -252,21 +252,9 @@ func (p *Pager) viewModeKey(ev *tcell.EventKey) int {
 			p.incrementLines(29)
 			p.DrawWithRefresh()
 		case '<':
-			p.offY = 0
-			p.posY = 0
-			p.offX = 0
-			p.screen.Sync()
-			p.Draw()
+			p.scrollLeft()
 		case '>':
-			_, y := p.screen.Size()
-			p.offY = p.linenum - y + 1
-			p.posY = p.linenum -1
-			p.offX = 0
-			if p.offY < 0 {
-				p.offY = 0
-			}
-			p.screen.Sync()
-			p.Draw()
+			p.scrollRight()
 		default:
 			p.Draw()
 		}
@@ -314,8 +302,28 @@ func (p *Pager) scrollUp() {
 	}
 	p.DrawInternal(withRefresh)
 }
-
 func (p *Pager) scrollRight() {
+	width := p.termWidth()
+	p.offX += width/2
+	if p.posX < p.offX {
+		p.posX = p.offX
+	}
+	p.DrawWithRefresh()
+}
+func (p *Pager) scrollLeft() {
+	width := p.termWidth()
+	if p.offX == 0 {
+		p.posX = 0
+	} else {
+		p.offX = max(0, p.offX-width/2)
+		if p.posX >= p.offX +width {
+			p.posX = p.offX+width-1
+		}
+	}
+	p.DrawWithRefresh()
+}
+
+func (p *Pager) moveRight() {
 	withRefresh := false
 	p.posX += 1
 	width := p.termWidth()
@@ -326,7 +334,7 @@ func (p *Pager) scrollRight() {
 	p.DrawInternal(withRefresh)
 }
 
-func (p *Pager) scrollLeft() {
+func (p *Pager) moveLeft() {
 	withRefresh := false
 	p.posX = max(0, p.posX -1)
 
