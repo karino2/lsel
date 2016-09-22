@@ -2,7 +2,8 @@ package main
 
 import (
 	// "fmt"
-	"github.com/nsf/termbox-go"
+	"github.com/gdamore/tcell"
+	"github.com/mattn/go-runewidth"
 	// "log"
 	"regexp"
 	// "strings"
@@ -21,6 +22,7 @@ type Pager struct {
 	lineSelected string
 	posY, posX int
 	offX, offY int
+	screen tcell.Screen
 }
 
 func (p *Pager) SetContent(s string) {
@@ -31,28 +33,75 @@ func (p *Pager) SetContent(s string) {
 	p.posX = 0
 	p.posY = 0
 	p.linenum = len(p.lines)
-}
-
-func (p *Pager) drawStatusLine(str string) {
-	runes := []rune(str)
-	for i := range(runes) {
-		termbox.SetCell(i, 0, runes[i], termbox.ColorBlue, termbox.ColorWhite)
+	if p.linenum > 0 && p.lines[p.linenum -1] == "" {
+		p.linenum -= 1
 	}
 }
 
-func termLineNum() int {
-	_, maxY := termbox.Size()
+
+func putln(s tcell.Screen, row int, str string, style tcell.Style) {
+	puts(s, style, 0, row, str)
+}
+
+func puts(s tcell.Screen, style tcell.Style, x, y int, str string) {
+	i := 0
+	var deferred []rune
+	dwidth := 0
+	for _, r := range str {
+		switch runewidth.RuneWidth(r) {
+		case 0:
+			if len(deferred) == 0 {
+				deferred = append(deferred, ' ')
+				dwidth = 1
+			}
+		case 1:
+			if len(deferred) != 0 {
+				s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				i += dwidth
+			}
+			deferred = nil
+			dwidth = 1
+		case 2:
+			if len(deferred) != 0 {
+				s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+				i += dwidth
+			}
+			deferred = nil
+			dwidth = 2
+		}
+		deferred = append(deferred, r)
+	}
+	if len(deferred) != 0 {
+		s.SetContent(x+i, y, deferred[0], deferred[1:], style)
+		i += dwidth
+	}
+}
+
+
+
+func (p *Pager) drawStatusLine(str string) {
+	putln(p.screen, 1, str, tcell.StyleDefault.Foreground(tcell.ColorBlue).Background(tcell.ColorWhite))
+}
+
+
+func (p *Pager) Size() (int, int) {
+	x, y := p.screen.Size()
+	return x, y-1
+}
+
+func (p *Pager) termLineNum() int {
+	_, maxY := p.Size()
 	return maxY
 }
 
-func termWidth() int {
-	maxX, _:= termbox.Size()
+func (p *Pager) termWidth() int {
+	maxX, _:= p.Size()
 	return maxX
 }
 
 
-func bodyLineNum() int {
-	return termLineNum() -1
+func (p *Pager) bodyLineNum() int {
+	return p.termLineNum() -1
 }
 
 
@@ -62,32 +111,30 @@ func (p *Pager) drawOneLine(y int) {
 	bodyOffsetY := 1
 
 	screenY := y - p.offY + bodyOffsetY
-	if screenY >= termLineNum()  || screenY < 1{
+	if screenY >= p.termLineNum()  || screenY < 1{
 		return
 	}
 
 
-	color := termbox.ColorDefault
-	backgroundColor := termbox.ColorDefault
+	
 
 	runes := []rune(line)
 
-	for i := 0; i < min(termWidth(), len(runes)-p.offX); i++ {
+	for i := 0; i < min(p.termWidth(), len(runes)-p.offX); i++ {
 		screenX := i
-		termbox.SetCell(screenX,  screenY, runes[i+p.offX], color, backgroundColor)
+		p.screen.SetContent(screenX,  screenY+1, runes[i+p.offX], nil, tcell.StyleDefault)
 	}
 }
 
 func (p *Pager) drawAllLines() {
-	for j := p.offY; j < min(p.offY+bodyLineNum(), p.linenum); j++ {
+	p.screen.SetStyle(tcell.StyleDefault)
+	for j := p.offY; j < min(p.offY+p.bodyLineNum(), p.linenum); j++ {
 		p.drawOneLine(j)
 	}
 }
 
 func (p *Pager) Clear() {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-	termbox.Flush()
-	termbox.Sync()
+	p.screen.Clear()
 	p.Draw()
 }
 func (p *Pager) Draw() {
@@ -99,9 +146,11 @@ func (p *Pager) DrawWithRefresh() {
 }
 
 func (p *Pager) DrawInternal(needRefresh bool) {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+	p.screen.Clear()
 	if needRefresh {
-		termbox.Flush()
+		// termbox.Flush()
+		p.screen.Sync()
+		// p.screen.Show()
 	}
 
 
@@ -119,8 +168,8 @@ func (p *Pager) DrawInternal(needRefresh bool) {
 	}
 	// p.drawStatusLine( "USAGE [exit: ESC/q] [scroll: j,k/C-n,C-p] "+nextFileUsage+mode+string(empty))
 	p.drawStatusLine( "USAGE [exit: ESC/q] [scroll: j,k/C-n,C-p] "+nextFileUsage+mode)
-	termbox.SetCursor(p.posX-p.offX, p.posY-p.offY+1)
-	termbox.Flush()
+	p.screen.ShowCursor(p.posX-p.offX, p.posY-p.offY+1)
+	p.screen.Show()
 }
 
 
@@ -128,7 +177,7 @@ func (p *Pager) DrawInternal(needRefresh bool) {
 
 func (p *Pager) incrementLines(delta int) {
 	prevIY := p.offY
-	bodyLNum := bodyLineNum()
+	bodyLNum := p.bodyLineNum()
 	p.offY = max(0, min(p.offY+delta, p.linenum -  bodyLNum ))
 	p.posY = p.offY
 	if p.offY - prevIY < delta {
@@ -151,34 +200,37 @@ func max(x, y int) int {
 }
 
 
-func (p *Pager) viewModeKey(ev termbox.Event) int {
-	switch ev.Key {
-	case termbox.KeyEnter:
-		defer termbox.Flush()
+func (p *Pager) viewModeKey(ev *tcell.EventKey) int {
+	switch ev.Key() {
+	case tcell.KeyEnter:
+		// defer p.screen.Flush()
 		return p.onEnter()
-	case termbox.KeyEsc, termbox.KeyCtrlC:
-		termbox.Flush()
+	case tcell.KeyEsc, tcell.KeyCtrlC:
+		// termbox.Flush()
 		return QUIT
-	case termbox.KeyCtrlL:
+	case tcell.KeyCtrlL:
+		p.screen.Sync()
+		/*
 		termbox.Flush()
 		termbox.Sync()
-	case termbox.KeyArrowRight:
+		*/
+	case tcell.KeyRight:
 		p.scrollRight()
-	case termbox.KeyArrowLeft:
+	case tcell.KeyLeft:
 		p.scrollLeft()
-	case termbox.KeyCtrlN, termbox.KeyArrowDown:
+	case tcell.KeyCtrlN, tcell.KeyDown:
 		p.scrollDown()
-	case termbox.KeyCtrlP, termbox.KeyArrowUp:
+	case tcell.KeyCtrlP, tcell.KeyUp:
 		p.scrollUp()
-	case termbox.KeyCtrlD, termbox.KeySpace:
+	case tcell.KeyCtrlD:
 		p.incrementLines(29)
 		p.DrawWithRefresh()
-	case termbox.KeyCtrlU, termbox.KeyCtrlB:
+	case tcell.KeyCtrlU, tcell.KeyCtrlB:
 		p.offY = max(0, p.offY - 29)
 		p.posY = p.offY
 		p.DrawWithRefresh()
 	default:
-		switch ev.Ch {
+		switch ev.Rune() {
 		case 'j':
 			p.scrollDown()
 		case 'k':
@@ -188,27 +240,30 @@ func (p *Pager) viewModeKey(ev termbox.Event) int {
 		case 'h':
 			p.scrollLeft()
 		case 'q':
-			termbox.Sync()
+			p.screen.Sync()
 			return QUIT
 		case 'b':
 			p.offY = max(0, p.offY - 29)
 			p.posY = p.offY
 			p.DrawWithRefresh()
+		case ' ':
+			p.incrementLines(29)
+			p.DrawWithRefresh()
 		case '<':
 			p.offY = 0
 			p.posY = 0
 			p.offX = 0
-			termbox.Sync()
+			p.screen.Sync()
 			p.Draw()
 		case '>':
-			_, y := termbox.Size()
+			_, y := p.screen.Size()
 			p.offY = p.linenum - y + 1
 			p.posY = p.linenum -1
 			p.offX = 0
 			if p.offY < 0 {
 				p.offY = 0
 			}
-			termbox.Sync()
+			p.screen.Sync()
 			p.Draw()
 		default:
 			p.Draw()
@@ -220,8 +275,9 @@ func (p *Pager) viewModeKey(ev termbox.Event) int {
 func (p *Pager) PollEvent() bool {
 	p.Draw()
 	for {
-		switch ev := termbox.PollEvent(); ev.Type {
-		case termbox.EventKey:
+		ev := p.screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
 			ret := p.viewModeKey(ev)
 			if ret == QUIT {
 				return true
@@ -236,7 +292,7 @@ func (p *Pager) PollEvent() bool {
 
 
 func (p *Pager) scrollDown() {
-	bodyLNum := bodyLineNum()
+	bodyLNum := p.bodyLineNum()
 	withRefresh := false
 	
 	p.posY = min(p.posY+1, p.linenum-1)
@@ -260,7 +316,7 @@ func (p *Pager) scrollUp() {
 func (p *Pager) scrollRight() {
 	withRefresh := false
 	p.posX += 1
-	width := termWidth()
+	width := p.termWidth()
 	if p.posX - p.offX >= width {
 		withRefresh = true
 		p.offX += width/2
@@ -274,23 +330,25 @@ func (p *Pager) scrollLeft() {
 
 	if p.posX < p.offX {
 		withRefresh = true
-		p.offX = max(0, p.offX - termWidth()/2)
+		p.offX = max(0, p.offX - p.termWidth()/2)
 	}
 	p.DrawInternal(withRefresh)
 }
 
 func (p *Pager) Init() {
-	err := termbox.Init()
-	if err != nil {
-		panic(err)
+	s, e := tcell.NewScreen()
+	if e != nil {
+		panic(e)
+	}
+	p.screen = s
+	e = p.screen.Init()
+	if e != nil {
+		panic(e)
 	}
 }
 
 func (p *Pager) Close() {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-	termbox.Flush()
-	termbox.Sync()
-	termbox.Close()
+	p.screen.Fini()
 }
 
 
@@ -299,7 +357,7 @@ func (p *Pager) onEnter() int {
 		return NO_ACTION	
 	}
 
-	// log.Fatal("len %d, pos %d, linnum %d", len(p.lines), p.posY, p.linenum)	
+	// log.Fatal("len %d, pos %d, linnum %d", len(p.lines), p.posY, p.linenum, p.lines[p.posY])	
 	p.lineSelected = p.lines[p.posY]
 	// log.Fatal("len %d, pos %d, linnum %d", len(p.lines), p.posY, p.linenum, p.lineSelected)	
 	// p.lineSelected = "Test!:fuafuga"
