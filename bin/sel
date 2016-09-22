@@ -1,0 +1,4 @@
+#!/bin/sh
+
+
+lsel | xargs bash -c '</dev/tty cvim --remote "$@"' ignoreme
