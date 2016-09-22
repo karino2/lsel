@@ -1,4 +1,8 @@
 #!/bin/sh
 
 
-lsel | xargs bash -c '</dev/tty cvim --remote "$@"' ignoreme
+# lsel | xargs bash -c '</dev/tty /usr/local/bin/vim --remote "$@"' ignoreme
+res=`lsel`
+if [ "$?" = "0" ]; then
+	bash -c "</dev/tty /usr/local/bin/vim --remote \"$res\"" ignoreme
+fi
